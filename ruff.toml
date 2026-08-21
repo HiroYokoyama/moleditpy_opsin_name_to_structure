@@ -1,0 +1,3 @@
+# Vendored from the plugin template and synced verbatim across the plugin
+# repos — not ours to reformat.
+extend-exclude = ["tests/plugin_api_checker.py", "tests/test_api.py"]
