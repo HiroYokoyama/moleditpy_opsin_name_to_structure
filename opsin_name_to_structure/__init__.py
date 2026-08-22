@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "OPSIN Name to Structure"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.2.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Convert systematic IUPAC names into structures offline with OPSIN "
-    "and load them into the 2D editor."
+    "and load them into the 2D editor. Requires Java Runtime (JRE)."
 )
 PLUGIN_CATEGORY = "Import"
 PLUGIN_TAGS = ["2D Editor", "Name Resolution", "IUPAC", "Offline"]

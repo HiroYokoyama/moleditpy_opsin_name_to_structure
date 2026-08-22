@@ -11,13 +11,14 @@ OPSIN emits one output line per input line, leaving a blank line where a name
 did not parse, so a whole batch goes through a single JVM start.
 """
 
+import functools
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
-from typing import Any, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 try:
     from rdkit import Chem
@@ -87,8 +88,13 @@ def java_path() -> Optional[str]:
     return shutil.which("java")
 
 
+@functools.lru_cache(maxsize=1)
 def jar_path() -> Optional[str]:
-    """The OPSIN jar inside the installed py2opsin package, if present."""
+    """The OPSIN jar inside the installed py2opsin package, if present.
+
+    Cached: this walks a whole site-packages subtree, and the jar does not
+    move while the editor is running.
+    """
     try:
         import py2opsin
     except ImportError:
@@ -134,16 +140,34 @@ def _no_window() -> Any:
     return info
 
 
+def _scratch_path() -> str:
+    """A private file for the batch; OPSIN reads names from a file, not stdin."""
+    return os.path.join(tempfile.gettempdir(), f"opsin_names_{uuid.uuid4().hex}.txt")
+
+
+def _discard(path: str) -> None:
+    """Remove a scratch file, tolerating a runner that already removed it."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def _run_jar(
     names: Sequence[str], options: Options, timeout: int
-) -> Optional[List[str]]:
-    """Drive the jar directly. Returns one line per name, or None if we can't."""
+) -> Optional[Tuple[List[str], str]]:
+    """Drive the jar directly. Returns (lines, stderr), or None if we can't.
+
+    Raises OpsinUnavailable if the JVM itself failed: without that check a
+    broken jar or an out-of-memory kill returns no output at all, and every
+    name in the batch would be reported as an unreadable name instead.
+    """
     jar = jar_path()
     java = java_path()
     if not jar or not java:
         return None
 
-    scratch = os.path.join(tempfile.gettempdir(), f"opsin_names_{uuid.uuid4().hex}.txt")
+    scratch = _scratch_path()
     try:
         with open(scratch, "w", encoding="utf-8") as handle:
             handle.write("\n".join(names) + "\n")
@@ -156,37 +180,79 @@ def _run_jar(
             check=False,
         )
     finally:
-        try:
-            os.remove(scratch)
-        except OSError:
-            pass
+        _discard(scratch)
+
+    if result.returncode != 0:
+        # A name OPSIN cannot read still exits 0 (it just leaves a blank line),
+        # so a non-zero code means the run itself broke.
+        detail = (result.stderr or "").strip().splitlines()
+        tail = detail[-1] if detail else f"exit code {result.returncode}"
+        raise OpsinUnavailable(f"OPSIN could not be run: {tail}")
 
     # A blank line marks a name OPSIN rejected, so the rows stay aligned.
-    return result.stdout.splitlines()
+    return result.stdout.splitlines(), result.stderr or ""
 
 
-def _run_py2opsin(names: Sequence[str], options: Options) -> List[str]:
-    """Fallback: py2opsin's own entry point (no timeout of its own)."""
+def _run_py2opsin(names: Sequence[str], options: Options) -> Tuple[List[str], str]:
+    """Fallback: py2opsin's own entry point (no timeout, and no stderr for us)."""
     from py2opsin import py2opsin
 
-    scratch = os.path.join(tempfile.gettempdir(), f"opsin_names_{uuid.uuid4().hex}.txt")
-    output = py2opsin(
-        list(names),
-        allow_acid=options.allow_acid,
-        allow_radicals=options.allow_radicals,
-        allow_bad_stereo=options.allow_bad_stereo,
-        wildcard_radicals=options.wildcard_radicals,
-        tmp_fpath=scratch,
-    )
+    scratch = _scratch_path()
+    try:
+        output = py2opsin(
+            list(names),
+            allow_acid=options.allow_acid,
+            allow_radicals=options.allow_radicals,
+            allow_bad_stereo=options.allow_bad_stereo,
+            wildcard_radicals=options.wildcard_radicals,
+            tmp_fpath=scratch,
+        )
+    finally:
+        # py2opsin usually clears this up; when it raises, nobody does.
+        _discard(scratch)
     if isinstance(output, str):
         output = output.splitlines()
-    return list(output)
+    return list(output), ""
 
 
-def _describe(name: str, smiles: str) -> Conversion:
+GENERIC_FAILURE = "OPSIN could not interpret this name."
+
+
+def parse_errors(stderr: str, failed: Sequence[str]) -> Dict[str, str]:
+    """Map each unreadable name to the reason OPSIN gave for it.
+
+    OPSIN writes one complaint per rejected name on stderr, in input order.
+    Most of them open with the name itself ("<name> is unparsable due to..."),
+    which pairs them beyond doubt. A few do not -- "acetic" without the acid
+    flag just yields '"acid" not found after ic' -- so whatever is left over is
+    paired positionally, and then only when exactly as many complaints as names
+    remain. An uncertain pairing would put one name's reason against another,
+    which is worse than saying nothing.
+    """
+    messages = [line.strip() for line in (stderr or "").splitlines() if line.strip()]
+    reasons: Dict[str, str] = {}
+
+    unmatched_names = []
+    for name in failed:
+        hit = next((m for m in messages if m.startswith(name)), None)
+        if hit is None:
+            unmatched_names.append(name)
+            continue
+        # The row already says which name this is; leading with it again just
+        # pushes the actual reason out of view.
+        reasons[name] = hit[len(name) :].strip() or hit
+        messages.remove(hit)
+
+    if len(unmatched_names) == len(messages):
+        for name, message in zip(unmatched_names, messages):
+            reasons[name] = message
+    return reasons
+
+
+def _describe(name: str, smiles: str, reason: str = "") -> Conversion:
     """Attach formula and InChI, derived locally so the JVM runs only once."""
     if not smiles:
-        return Conversion(name=name, error="OPSIN could not interpret this name.")
+        return Conversion(name=name, error=reason or GENERIC_FAILURE)
     if Chem is None:
         return Conversion(name=name, smiles=smiles)
 
@@ -227,15 +293,22 @@ def convert(
 
     options = options or Options()
     try:
-        lines = _run_jar(names, options, timeout)
-        if lines is None:
-            lines = _run_py2opsin(names, options)
+        outcome = _run_jar(names, options, timeout)
+        if outcome is None:
+            outcome = _run_py2opsin(names, options)
     except subprocess.TimeoutExpired as exc:
         raise OpsinUnavailable(
             f"OPSIN did not finish within {timeout} seconds."
         ) from exc
+    lines, stderr = outcome
 
     # zip() would silently drop names if a runner ever returned a short list,
     # so pad here, where names and lines are actually paired.
     lines = list(lines) + [""] * max(0, len(names) - len(lines))
-    return [_describe(name, line.strip()) for name, line in zip(names, lines)]
+    smiles = [line.strip() for line in lines]
+
+    reasons = parse_errors(stderr, [n for n, s in zip(names, smiles) if not s])
+    return [
+        _describe(name, found, reasons.get(name, ""))
+        for name, found in zip(names, smiles)
+    ]

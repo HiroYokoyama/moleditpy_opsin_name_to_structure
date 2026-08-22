@@ -26,9 +26,11 @@ the OPSIN jar comes from the pip-installable
 [`py2opsin`](https://pypi.org/project/py2opsin/) package, which is declared as a
 normal plugin dependency.
 
-A **Java runtime is still required** and cannot be installed with pip. If `java`
-is not on your PATH the window opens, disables Convert and tells you what to
-install, rather than failing halfway through a batch.
+A **Java runtime (JRE) is still required** and cannot be installed with pip. If
+`java` is not on your PATH the window opens, disables Convert and tells you what
+to install, rather than failing halfway through a batch. Install Java afterwards
+and simply reopen the window — it looks again rather than staying disabled for
+the rest of the session.
 
 ## Install
 
@@ -44,11 +46,16 @@ install, rather than failing halfway through a batch.
 **Plugins → OPSIN Name to Structure...**
 
 - One name per line; blank lines and duplicates are ignored.
-- **Convert** parses the whole batch with a single JVM start.
-- Every name gets a row — successes *and* failures, with OPSIN's reason — so
-  nothing disappears quietly.
+- **Convert** (or **Ctrl+Enter**) parses the whole batch with a single JVM start.
+- Every name gets a row — successes *and* failures — so nothing disappears
+  quietly. A failed row carries **OPSIN's own reason**, not a generic message:
+  `pyridin-2-yl` says it is just a substituent, `acetic` says `"acid" not found
+  after ic`. That usually tells you which option to tick.
+- The first column is the line the name came in on, so the table reads in the
+  order you typed it. Click any header to sort; click **#** to get back.
 - **Load to 2D Editor** (or double-click a row) puts that structure on the canvas.
-- **Copy SMILES / InChI / InChIKey** for the selected row.
+- **Copy SMILES / InChI / InChIKey** for every selected row, one per line.
+- **Export CSV...** writes the whole table, failures and their reasons included.
 
 ### Options
 

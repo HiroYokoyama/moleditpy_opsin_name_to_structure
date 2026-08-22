@@ -1,19 +1,23 @@
 """The OPSIN window: names in, structures out, into the 2D editor."""
 
+import csv
 import logging
 from typing import Any, List, Optional
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -25,13 +29,26 @@ from . import engine
 logger = logging.getLogger(__name__)
 
 WINDOW_ID = "main_panel"
-_COLUMNS = ["Name", "Formula", "SMILES", "Status"]
+# "#" is the line the name came in on. It is what makes input order a sort
+# order like any other: enabling sorting otherwise reorders the table the
+# moment it is filled, and there is no way back to the order you typed.
+_COLUMNS = ["#", "Name", "Formula", "SMILES", "InChIKey", "Status"]
+_ORDER_COLUMN = 0
+_SMILES_COLUMN = 3
+#: Qt row -> index into self.results. Sorting reorders rows, not results.
+_RESULT_INDEX = Qt.ItemDataRole.UserRole
 _PLACEHOLDER = (
     "One name per line, for example:\n"
     "  2,4-dimethoxybenzaldehyde\n"
     "  (2R)-2-amino-3-phenylpropanoic acid\n"
     "  4-[(1E)-2-phenylethenyl]pyridine"
 )
+#: How long a closing window waits for a conversion before letting it run on.
+_CLOSE_GRACE_MS = 3000
+
+#: Workers outliving their dialog. A QThread whose last Python reference goes
+#: while it is still running takes the process with it, so they wait here.
+_ORPHANED: List["ConvertWorker"] = []
 
 
 class ConvertWorker(QThread):
@@ -63,12 +80,13 @@ class OpsinDialog(QDialog):
         self.context = context
         self.results: List[engine.Conversion] = []
         self.worker: Optional[ConvertWorker] = None
+        self._torn_down = False
 
         self.setWindowTitle("OPSIN Name to Structure")
         self.setModal(False)
-        self.resize(820, 620)
+        self.resize(880, 640)
         self._build_ui()
-        self._check_availability()
+        self.check_availability()
 
     # --- UI ---
 
@@ -112,19 +130,34 @@ class OpsinDialog(QDialog):
         actions = QHBoxLayout()
         self.convert_button = QPushButton("Convert")
         self.convert_button.setDefault(True)
+        self.convert_button.setToolTip("Convert every name in the box (Ctrl+Enter)")
         self.convert_button.clicked.connect(self.run_conversion)
         actions.addWidget(self.convert_button)
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.setToolTip("Empty the name box and the results table")
+        self.clear_button.clicked.connect(self.clear_all)
+        actions.addWidget(self.clear_button)
         self.status = QLabel("Offline — names are parsed on this computer.")
         self.status.setWordWrap(True)
         actions.addWidget(self.status, 1)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)  # OPSIN reports no progress: just show life
+        self.progress.setMaximumWidth(120)
+        self.progress.hide()
+        actions.addWidget(self.progress)
         layout.addLayout(actions)
+
+        # Enter has to stay a newline in a multi-line box, so Ctrl+Enter converts.
+        for sequence in ("Ctrl+Return", "Ctrl+Enter"):
+            QShortcut(QKeySequence(sequence), self, activated=self.run_conversion)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSortingEnabled(True)
         self.table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch
+            _SMILES_COLUMN, QHeaderView.ResizeMode.Stretch
         )
         self.table.itemDoubleClicked.connect(lambda _item: self.load_selected())
         layout.addWidget(self.table, 1)
@@ -141,22 +174,39 @@ class OpsinDialog(QDialog):
             button = QPushButton(label)
             button.clicked.connect(lambda _c=False, a=attr: self.copy_field(a))
             buttons.addWidget(button)
+        self.export_button = QPushButton("Export CSV...")
+        self.export_button.setToolTip("Save every row, failures included, as CSV")
+        self.export_button.clicked.connect(self.export_csv)
+        buttons.addWidget(self.export_button)
         buttons.addStretch()
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.close)
         buttons.addWidget(close_button)
         layout.addLayout(buttons)
 
-    def _check_availability(self) -> None:
+    def check_availability(self) -> bool:
         """OPSIN needs Java, which pip cannot install: say so up front."""
         usable, message = engine.availability()
         self.convert_button.setEnabled(usable)
         if usable:
             self.notice.hide()
-            return
+            return True
         self.notice.setText(message)
         self.notice.show()
         self.status.setText("OPSIN is unavailable.")
+        return False
+
+    def showEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
+        """Re-check on every open.
+
+        The window is a singleton, so a user who installs Java after seeing the
+        notice would otherwise be stuck with a disabled Convert button for the
+        rest of the session.
+        """
+        super().showEvent(event)
+        if not self.convert_button.isEnabled():
+            engine.jar_path.cache_clear()
+            self.check_availability()
 
     # --- conversion ---
 
@@ -172,51 +222,107 @@ class OpsinDialog(QDialog):
         """Start a background conversion of every name in the box."""
         if self.worker is not None and self.worker.isRunning():
             return
+        if not self.convert_button.isEnabled():
+            return
         names = engine.split_names(self.input.toPlainText())
         if not names:
             self.status.setText("Type at least one name.")
             return
 
-        self.convert_button.setEnabled(False)
+        self._set_busy(True)
         self.status.setText(f"Converting {len(names)} name(s)...")
         self.worker = ConvertWorker(names, self.options())
         self.worker.done.connect(self._conversion_done)
         self.worker.failed.connect(self._conversion_failed)
         self.worker.start()
 
+    def _set_busy(self, busy: bool) -> None:
+        """A batch can take a while; show that something is happening."""
+        self.convert_button.setEnabled(not busy)
+        self.input.setReadOnly(busy)
+        self.progress.setVisible(busy)
+
     def _conversion_done(self, results: List[engine.Conversion]) -> None:
         self.results = results
         self.populate_table()
         good = sum(1 for r in results if r.ok)
         self.status.setText(f"{good} of {len(results)} name(s) converted.")
-        self.convert_button.setEnabled(True)
+        self._set_busy(False)
 
     def _conversion_failed(self, message: str) -> None:
         self.status.setText("OPSIN could not run.")
-        self.convert_button.setEnabled(True)
+        self._set_busy(False)
         QMessageBox.warning(self, "OPSIN Name to Structure", message)
+
+    def clear_all(self) -> None:
+        """Empty both the input and the results."""
+        self.input.clear()
+        self.results = []
+        self.populate_table()
+        self.status.setText("Cleared.")
 
     def populate_table(self) -> None:
         """Show every row, failures included, so nothing disappears silently."""
-        self.table.setRowCount(0)
-        for result in self.results:
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            status = "OK" if result.ok else (result.error or "Failed")
-            for column, text in enumerate(
-                (result.name, result.formula, result.smiles, status)
-            ):
-                self.table.setItem(row, column, QTableWidgetItem(text))
+        # Filling a sorted table re-sorts as rows arrive, which scrambles them.
+        self.table.setSortingEnabled(False)
+        try:
+            self.table.setRowCount(0)
+            for index, result in enumerate(self.results):
+                row = self.table.rowCount()
+                self.table.insertRow(row)
+                status = "OK" if result.ok else (result.error or "Failed")
+                cells = (
+                    result.name,
+                    result.formula,
+                    result.smiles,
+                    result.inchikey,
+                    status,
+                )
+
+                order = QTableWidgetItem()
+                # A number, not its text: "10" must not sort before "2".
+                order.setData(Qt.ItemDataRole.DisplayRole, index + 1)
+                order.setData(_RESULT_INDEX, index)
+                self.table.setItem(row, _ORDER_COLUMN, order)
+
+                for offset, text in enumerate(cells):
+                    item = QTableWidgetItem(text)
+                    # Sorting shuffles rows; the row number stops meaning
+                    # anything, so each cell carries its result's index.
+                    item.setData(_RESULT_INDEX, index)
+                    if text:
+                        item.setToolTip(text)
+                    self.table.setItem(row, _ORDER_COLUMN + 1 + offset, item)
+        finally:
+            self.table.setSortingEnabled(True)
+        # Enabling sorting sorts by whatever the header last pointed at; point
+        # it at input order so a fresh batch reads the way it was typed.
+        self.table.sortItems(_ORDER_COLUMN, Qt.SortOrder.AscendingOrder)
         if self.results:
             self.table.selectRow(0)
 
     # --- results ---
 
-    def selected_result(self) -> Optional[engine.Conversion]:
-        row = self.table.currentRow()
-        if 0 <= row < len(self.results):
-            return self.results[row]
+    def result_at_row(self, row: int) -> Optional[engine.Conversion]:
+        """The result a table row stands for, whatever the sort order is."""
+        item = self.table.item(row, _ORDER_COLUMN)
+        if item is None:
+            return None
+        index = item.data(_RESULT_INDEX)
+        if isinstance(index, int) and 0 <= index < len(self.results):
+            return self.results[index]
         return None
+
+    def selected_result(self) -> Optional[engine.Conversion]:
+        return self.result_at_row(self.table.currentRow())
+
+    def selected_results(self) -> List[engine.Conversion]:
+        """Every selected row, in the order the table shows them."""
+        rows = sorted(
+            index.row() for index in self.table.selectionModel().selectedRows()
+        )
+        found = [self.result_at_row(row) for row in rows]
+        return [result for result in found if result is not None]
 
     def load_selected(self) -> None:
         """Put the selected structure into the 2D editor."""
@@ -238,27 +344,86 @@ class OpsinDialog(QDialog):
         self.status.setText(f"Loaded: {result.name}")
 
     def copy_field(self, attribute: str) -> None:
-        """Copy one field of the selected row to the clipboard."""
-        result = self.selected_result()
-        if result is None:
+        """Copy one field of every selected row to the clipboard."""
+        results = self.selected_results()
+        if not results:
             self.status.setText("Select a row first.")
             return
-        value = getattr(result, attribute, "")
-        if not value:
-            self.status.setText(f"No {attribute} for '{result.name}'.")
+        values = [getattr(result, attribute, "") for result in results]
+        values = [value for value in values if value]
+        if not values:
+            names = ", ".join(f"'{r.name}'" for r in results)
+            self.status.setText(f"No {attribute} for {names}.")
             return
         clipboard = QApplication.clipboard()
         if clipboard is not None:
-            clipboard.setText(value)
-        self.status.setText(f"Copied {attribute} for '{result.name}'.")
+            clipboard.setText("\n".join(values))
+        if len(values) == 1:
+            self.status.setText(f"Copied {attribute} for '{results[0].name}'.")
+        else:
+            self.status.setText(f"Copied {len(values)} {attribute} values.")
+
+    def export_csv(self) -> None:
+        """Write every row, failures included, to a CSV file."""
+        if not self.results:
+            self.status.setText("Nothing to export yet.")
+            return
+        path, _filter = QFileDialog.getSaveFileName(
+            self, "Export results", "opsin_results.csv", "CSV files (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            # newline="" is csv's own requirement; without it Windows doubles
+            # every line break in the file.
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(
+                    ["Name", "Formula", "SMILES", "InChIKey", "InChI", "Status"]
+                )
+                for result in self.results:
+                    writer.writerow(
+                        [
+                            result.name,
+                            result.formula,
+                            result.smiles,
+                            result.inchikey,
+                            result.inchi,
+                            "OK" if result.ok else (result.error or "Failed"),
+                        ]
+                    )
+        except OSError as exc:
+            logger.warning("Could not export results: %s", exc)
+            QMessageBox.warning(
+                self, "OPSIN Name to Structure", f"Could not write the file: {exc}"
+            )
+            return
+        self.status.setText(f"Exported {len(self.results)} row(s).")
 
     # --- teardown ---
 
     def _teardown(self) -> None:
+        # close() after reject() would otherwise run all of this twice.
+        if self._torn_down:
+            return
+        self._torn_down = True
+
         worker = self.worker
-        if worker is not None and worker.isRunning():
-            worker.wait(engine.DEFAULT_TIMEOUT * 1000)
         self.worker = None
+        if worker is not None:
+            # Results must not arrive at a window that is going away.
+            for signal in (worker.done, worker.failed):
+                try:
+                    signal.disconnect()
+                except TypeError:  # nothing was connected
+                    pass
+            if worker.isRunning():
+                # A JVM can outlast the window; wait briefly rather than
+                # freezing the editor for the whole OPSIN timeout, then let it
+                # finish on its own with a reference held so Qt keeps it alive.
+                if not worker.wait(_CLOSE_GRACE_MS):
+                    _ORPHANED.append(worker)
+                    worker.finished.connect(lambda w=worker: _forget(w))
         # Without this the next open reuses a dead window.
         self.context.register_window(WINDOW_ID, None)
 
@@ -271,3 +436,11 @@ class OpsinDialog(QDialog):
         """Esc never reaches closeEvent, so tear down from here too."""
         self._teardown()
         super().reject()
+
+
+def _forget(worker: "ConvertWorker") -> None:
+    """Drop an orphaned worker once its thread has actually finished."""
+    try:
+        _ORPHANED.remove(worker)
+    except ValueError:
+        pass

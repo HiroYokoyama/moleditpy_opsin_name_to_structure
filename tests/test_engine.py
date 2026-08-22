@@ -84,7 +84,7 @@ def available(monkeypatch):
 
 def test_convert_describes_each_result(available, monkeypatch):
     monkeypatch.setattr(
-        engine, "_run_jar", lambda names, options, timeout: ["C1=CC=CC=C1", "CCO"]
+        engine, "_run_jar", lambda names, options, timeout: (["C1=CC=CC=C1", "CCO"], "")
     )
     benzene, ethanol = engine.convert(["benzene", "ethanol"])
     assert benzene.ok and benzene.formula == "C6H6"
@@ -94,7 +94,7 @@ def test_convert_describes_each_result(available, monkeypatch):
 
 
 def test_blank_output_becomes_a_failed_row(available, monkeypatch):
-    monkeypatch.setattr(engine, "_run_jar", lambda n, o, t: ["", "CCO"])
+    monkeypatch.setattr(engine, "_run_jar", lambda n, o, t: (["", "CCO"], ""))
     bad, good = engine.convert(["nonsense", "ethanol"])
     assert not bad.ok and "could not interpret" in bad.error
     assert bad.name == "nonsense" and bad.smiles == ""
@@ -103,14 +103,16 @@ def test_blank_output_becomes_a_failed_row(available, monkeypatch):
 
 def test_short_output_is_padded_so_rows_stay_aligned(available, monkeypatch):
     # OPSIN prints one line per name; a truncated run must not shift results.
-    monkeypatch.setattr(engine, "_run_jar", lambda n, o, t: ["C1=CC=CC=C1"])
+    monkeypatch.setattr(engine, "_run_jar", lambda n, o, t: (["C1=CC=CC=C1"], ""))
     results = engine.convert(["benzene", "ethanol", "toluene"])
     assert [r.name for r in results] == ["benzene", "ethanol", "toluene"]
     assert results[0].ok and not results[1].ok and not results[2].ok
 
 
 def test_unreadable_smiles_is_reported_not_silently_dropped(available, monkeypatch):
-    monkeypatch.setattr(engine, "_run_jar", lambda n, o, t: ["not a smiles at all"])
+    monkeypatch.setattr(
+        engine, "_run_jar", lambda n, o, t: (["not a smiles at all"], "")
+    )
     (result,) = engine.convert(["weird"])
     assert not result.ok
     assert "RDKit" in result.error
@@ -127,7 +129,7 @@ def test_timeout_becomes_a_readable_error(available, monkeypatch):
 
 def test_falls_back_to_py2opsin_when_the_jar_is_missing(available, monkeypatch):
     monkeypatch.setattr(engine, "_run_jar", lambda n, o, t: None)
-    monkeypatch.setattr(engine, "_run_py2opsin", lambda names, options: ["CCO"])
+    monkeypatch.setattr(engine, "_run_py2opsin", lambda names, options: (["CCO"], ""))
     (result,) = engine.convert(["ethanol"])
     assert result.formula == "C2H6O"
 
@@ -137,7 +139,7 @@ def test_options_reach_the_runner(available, monkeypatch):
 
     def capture(names, options, timeout):
         seen["flags"] = options.flags()
-        return ["C1=CC=CC=C1"]
+        return ["C1=CC=CC=C1"], ""
 
     monkeypatch.setattr(engine, "_run_jar", capture)
     engine.convert(["benzene"], engine.Options(allow_radicals=True))

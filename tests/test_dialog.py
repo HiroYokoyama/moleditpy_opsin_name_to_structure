@@ -69,10 +69,12 @@ def test_results_fill_the_table(dialog, monkeypatch):
     run_sync(dialog)
 
     assert dialog.table.rowCount() == 2
-    assert dialog.table.item(0, 0).text() == "benzene"
-    assert dialog.table.item(0, 1).text() == "C6H6"
-    assert dialog.table.item(0, 3).text() == "OK"
-    assert "could not interpret" in dialog.table.item(1, 3).text()
+    # Column 0 is the input position, so the table reads in the order typed.
+    assert dialog.table.item(0, 0).text() == "1"
+    assert dialog.table.item(0, 1).text() == "benzene"
+    assert dialog.table.item(0, 2).text() == "C6H6"
+    assert dialog.table.item(0, 5).text() == "OK"
+    assert "could not interpret" in dialog.table.item(1, 5).text()
     assert dialog.status.text() == "1 of 2 name(s) converted."
 
 

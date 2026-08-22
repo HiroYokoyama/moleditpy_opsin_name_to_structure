@@ -52,3 +52,37 @@ def test_inchikey_is_produced():
 def test_the_jar_comes_from_py2opsin():
     jar = engine.jar_path()
     assert jar and "py2opsin" in jar.replace("\\", "/").lower()
+
+
+def test_real_opsin_explains_each_failure_in_its_own_words():
+    """The stderr contract this plugin now depends on, against the real jar.
+
+    OPSIN exits 0 for a name it cannot read and says why only on stderr, so a
+    change in either would quietly turn every reason back into boilerplate.
+    """
+    substituent, acid, nonsense = engine.convert(
+        ["pyridin-2-yl", "acetic", "not-a-real-name-xyz"]
+    )
+
+    assert not substituent.ok and "substituent" in substituent.error
+    assert not acid.ok and "acid" in acid.error
+    assert not nonsense.ok and "unparsable" in nonsense.error
+    # None of them should be falling back to the generic message.
+    for result in (substituent, acid, nonsense):
+        assert result.error != engine.GENERIC_FAILURE
+
+
+def test_the_options_turn_those_same_names_into_structures():
+    substituent, acid = engine.convert(
+        ["pyridin-2-yl", "acetic"],
+        engine.Options(allow_radicals=True, allow_acid=True),
+    )
+    assert substituent.ok and acid.ok
+    assert acid.formula == "C2H4O2"
+
+
+def test_a_partial_batch_keeps_exit_code_zero():
+    # The whole per-name error design rests on this: a rejected name is not a
+    # failed run, so convert() must not raise for it.
+    results = engine.convert(["benzene", "not-a-real-name-xyz"])
+    assert results[0].ok and not results[1].ok
