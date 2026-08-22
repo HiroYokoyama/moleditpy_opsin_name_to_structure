@@ -15,11 +15,11 @@ see the LICENSE file in the repository above for the full terms.
 
 import logging
 
-from PyQt6.QtWidgets import QWidget
-
-from .main_dialog import WINDOW_ID, OpsinDialog
-
 logger = logging.getLogger(__name__)
+
+# Qt and the dialog are imported inside show_dialog on purpose: it keeps
+# `from opsin_name_to_structure import engine` working without PyQt6, so the
+# conversion logic can be used (and tested) headless.
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "OPSIN Name to Structure"
@@ -44,6 +44,10 @@ def initialize(context):
 
 def show_dialog(context):
     """Singleton: reuse the existing window if it is already open."""
+    from PyQt6.QtWidgets import QWidget
+
+    from .main_dialog import WINDOW_ID, OpsinDialog
+
     window = context.get_window(WINDOW_ID)
     if window:
         window.show()

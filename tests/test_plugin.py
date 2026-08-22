@@ -58,3 +58,35 @@ def test_a_non_widget_main_window_does_not_crash(qapp, monkeypatch):
     window = plugin.show_dialog(context)
     assert window is not None
     window.close()
+
+
+def test_engine_and_metadata_import_without_qt():
+    """The conversion side must not drag in PyQt6.
+
+    CI runs the real-OPSIN job without PyQt6 installed; keeping Qt out of the
+    package import is what lets the engine be used and tested headless.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = (
+        "import sys\n"
+        "from importlib.abc import MetaPathFinder\n"
+        "class Block(MetaPathFinder):\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name == 'PyQt6' or name.startswith('PyQt6.'):\n"
+        "            raise ModuleNotFoundError(name)\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, Block())\n"
+        "from opsin_name_to_structure import engine\n"
+        "import opsin_name_to_structure as p\n"
+        "assert callable(engine.convert) and p.PLUGIN_VERSION\n"
+        "print('ok')\n"
+    )
+    repo = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, cwd=repo
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout
