@@ -30,7 +30,7 @@ PLUGIN_DESCRIPTION = (
     "and load them into the 2D editor. Requires Java Runtime (JRE)."
 )
 PLUGIN_CATEGORY = "Import"
-PLUGIN_TAGS = ["2D Editor", "Name Resolution", "IUPAC", "Offline"]
+PLUGIN_TAGS = ["Utility"]
 PLUGIN_DEPENDENCIES = ["py2opsin"]
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=3.0.0, <5.0.0"
 PLUGIN_SUPPORTED_PYTHON_VERSION = ">=3.9, <3.15"
