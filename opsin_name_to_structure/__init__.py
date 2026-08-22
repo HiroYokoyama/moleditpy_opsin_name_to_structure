@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "OPSIN Name to Structure"
-PLUGIN_VERSION = "1.0.0"
+PLUGIN_VERSION = "1.0.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Convert systematic IUPAC names into structures offline with OPSIN "
@@ -36,10 +36,27 @@ PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=3.0.0, <5.0.0"
 PLUGIN_SUPPORTED_PYTHON_VERSION = ">=3.9, <3.15"
 PLUGIN_SUPPORTED_OS = ["Windows", "macOS", "Linux", "WSL"]
 
+PLUGIN_CONTEXT = None
+
 
 def initialize(context):
-    """Register the window in the Plugins menu."""
-    context.add_plugin_menu("OPSIN Name to Structure...", lambda: show_dialog(context))
+    """Store the context for the host-auto-registered run() entry point.
+
+    The host picks up run() and adds it to the Plugins menu automatically,
+    so no explicit add_plugin_menu() call is needed here.
+    """
+    global PLUGIN_CONTEXT
+    PLUGIN_CONTEXT = context
+
+
+def run(mw):
+    """Entry point called by the host from the Plugins menu."""
+    if hasattr(mw, "host"):
+        mw = mw.host
+    context = PLUGIN_CONTEXT
+    if not context:
+        return
+    show_dialog(context)
 
 
 def show_dialog(context):
