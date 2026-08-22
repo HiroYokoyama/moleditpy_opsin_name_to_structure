@@ -1,6 +1,7 @@
 # OPSIN Name to Structure
 
 [![Tests](https://github.com/HiroYokoyama/moleditpy_opsin_name_to_structure/actions/workflows/tests.yml/badge.svg)](https://github.com/HiroYokoyama/moleditpy_opsin_name_to_structure/actions/workflows/tests.yml)
+[![Downloads](https://img.shields.io/github/downloads/HiroYokoyama/moleditpy_opsin_name_to_structure/total)](https://github.com/HiroYokoyama/moleditpy_opsin_name_to_structure/releases)
 ![license](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 Type a systematic IUPAC name, get the structure in the 2D editor of
