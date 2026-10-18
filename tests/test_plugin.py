@@ -24,7 +24,7 @@ def test_py2opsin_is_declared_because_it_carries_the_jar():
 def test_supported_os_and_python():
     assert set(plugin.PLUGIN_SUPPORTED_OS) == {"Windows", "macOS", "Linux", "WSL"}
     assert plugin.PLUGIN_SUPPORTED_PYTHON_VERSION.startswith(">=3.10")
-    assert plugin.PLUGIN_SUPPORTED_MOLEDITPY_VERSION.startswith(">=3.0.0")
+    assert plugin.PLUGIN_SUPPORTED_MOLEDITPY_VERSION == ">=5.0.0, <6.0.0"
 
 
 def test_initialize_stores_context_only(qapp):
