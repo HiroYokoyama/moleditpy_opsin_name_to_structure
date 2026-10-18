@@ -4,8 +4,8 @@ conversation that is still running."""
 import csv
 
 import pytest
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 
 from opsin_name_to_structure import engine
 from opsin_name_to_structure.main_dialog import (

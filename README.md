@@ -81,7 +81,7 @@ complement to those.
 ## Development
 
 ```bash
-pip install pytest pytest-cov PyQt6 rdkit py2opsin
+pip install pytest pytest-cov PySide6 rdkit py2opsin
 QT_QPA_PLATFORM=offscreen python -m pytest tests/ -v
 ```
 

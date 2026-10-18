@@ -35,7 +35,7 @@ jobs:
             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3
 
       - name: Install dependencies
-        run: pip install pytest pytest-cov PyQt6 rdkit py2opsin
+        run: pip install pytest pytest-cov PySide6-Essentials rdkit py2opsin
 
       - name: Run tests with coverage
         env:
@@ -103,11 +103,11 @@ jobs:
             libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3
 
       - name: Install dependencies
-        run: pip install pytest PyQt6 rdkit py2opsin
+        run: pip install pytest PySide6-Essentials rdkit py2opsin
 
       - name: Clone main MoleditPy application
         run: |
-          git clone --depth 1 \
+          git clone --depth 1 --branch "${{ vars.MOLEDITPY_REF || 'migrate/pyside6-without-openbabel' }}" \
             https://github.com/HiroYokoyama/python_molecular_editor.git \
             ../python_molecular_editor
 

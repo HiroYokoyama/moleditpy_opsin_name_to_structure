@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - rdkit missing is reported by the tests
 @pytest.fixture(scope="session")
 def qapp():
     """One QApplication for the session; widgets need it to exist."""
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication([])
     yield app

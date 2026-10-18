@@ -12,7 +12,7 @@ from .fakes import FakeContext
 
 def test_metadata():
     assert plugin.PLUGIN_NAME == "OPSIN Name to Structure"
-    assert re.fullmatch(r"\d+\.\d+\.\d+", plugin.PLUGIN_VERSION)
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:a\d+)?", plugin.PLUGIN_VERSION)
     assert plugin.PLUGIN_AUTHOR and plugin.PLUGIN_DESCRIPTION
     assert isinstance(plugin.PLUGIN_TAGS, list) and plugin.PLUGIN_TAGS
 
@@ -23,7 +23,7 @@ def test_py2opsin_is_declared_because_it_carries_the_jar():
 
 def test_supported_os_and_python():
     assert set(plugin.PLUGIN_SUPPORTED_OS) == {"Windows", "macOS", "Linux", "WSL"}
-    assert plugin.PLUGIN_SUPPORTED_PYTHON_VERSION.startswith(">=3.9")
+    assert plugin.PLUGIN_SUPPORTED_PYTHON_VERSION.startswith(">=3.10")
     assert plugin.PLUGIN_SUPPORTED_MOLEDITPY_VERSION.startswith(">=3.0.0")
 
 
@@ -75,9 +75,9 @@ def test_a_non_widget_main_window_does_not_crash(qapp, monkeypatch):
 
 
 def test_engine_and_metadata_import_without_qt():
-    """The conversion side must not drag in PyQt6.
+    """The conversion side must not drag in PySide6.
 
-    CI runs the real-OPSIN job without PyQt6 installed; keeping Qt out of the
+    CI runs the real-OPSIN job without PySide6 installed; keeping Qt out of the
     package import is what lets the engine be used and tested headless.
     """
     import subprocess
@@ -89,7 +89,7 @@ def test_engine_and_metadata_import_without_qt():
         "from importlib.abc import MetaPathFinder\n"
         "class Block(MetaPathFinder):\n"
         "    def find_spec(self, name, path=None, target=None):\n"
-        "        if name == 'PyQt6' or name.startswith('PyQt6.'):\n"
+        "        if name == 'PySide6' or name.startswith('PySide6.'):\n"
         "            raise ModuleNotFoundError(name)\n"
         "        return None\n"
         "sys.meta_path.insert(0, Block())\n"
