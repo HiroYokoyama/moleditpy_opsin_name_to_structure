@@ -35,7 +35,7 @@ def run_sync(dialog):
     dialog.run_conversion()
     if dialog.worker is not None:
         dialog.worker.wait(30000)
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     QApplication.processEvents()
 
@@ -117,7 +117,7 @@ def test_load_failure_from_the_host_is_surfaced(dialog, monkeypatch):
     dialog.input.setPlainText("benzene")
     run_sync(dialog)
     dialog.context.load_error = RuntimeError("editor busy")
-    monkeypatch.setattr("PyQt6.QtWidgets.QMessageBox.warning", lambda *a, **k: None)
+    monkeypatch.setattr("PySide6.QtWidgets.QMessageBox.warning", lambda *a, **k: None)
 
     dialog.load_selected()
 
@@ -133,7 +133,7 @@ def test_load_failure_from_the_host_is_surfaced(dialog, monkeypatch):
     ],
 )
 def test_copy_puts_the_field_on_the_clipboard(dialog, monkeypatch, field, expected):
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     convert_returns(monkeypatch, [BENZENE])
     dialog.input.setPlainText("benzene")
@@ -163,7 +163,7 @@ def test_options_are_read_from_the_checkboxes(dialog):
 def test_opsin_failure_shows_a_warning(dialog, monkeypatch):
     seen = {}
     monkeypatch.setattr(
-        "PyQt6.QtWidgets.QMessageBox.warning",
+        "PySide6.QtWidgets.QMessageBox.warning",
         lambda parent, title, text, *a, **k: seen.setdefault("text", text),
     )
 

@@ -81,7 +81,7 @@ complement to those.
 ## Development
 
 ```bash
-pip install pytest pytest-cov PyQt6 rdkit py2opsin
+pip install pytest pytest-cov PySide6 rdkit py2opsin
 QT_QPA_PLATFORM=offscreen python -m pytest tests/ -v
 ```
 
@@ -92,5 +92,9 @@ checked out as siblings.
 
 ## License
 
-GPL-3.0. See [LICENSE](LICENSE). OPSIN itself is MIT licensed and is distributed
+LGPL-3.0-or-later. See [LICENSE](LICENSE). OPSIN itself is MIT licensed and is distributed
 via `py2opsin`, not by this repository.
+
+## Licensing scope
+
+First-party code in this migration is LGPL-3.0-or-later. See [LICENSE](LICENSE), [COPYING](COPYING) and [dependency/provenance terms](LICENSING.md). Third-party components and historical releases retain their own terms.

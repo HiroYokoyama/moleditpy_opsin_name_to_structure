@@ -4,9 +4,9 @@ import csv
 import logging
 from typing import Any, List, Optional
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QKeySequence, QShortcut
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
@@ -54,8 +54,8 @@ _ORPHANED: List["ConvertWorker"] = []
 class ConvertWorker(QThread):
     """Runs OPSIN off the GUI thread; a batch is one JVM start."""
 
-    done = pyqtSignal(list)
-    failed = pyqtSignal(str)
+    done = Signal(list)
+    failed = Signal(str)
 
     def __init__(self, names: List[str], options: engine.Options) -> None:
         super().__init__()
