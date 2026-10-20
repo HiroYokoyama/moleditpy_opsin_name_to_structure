@@ -27,6 +27,7 @@ def _load_checker():
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     mod.__file__ = str(checker_path)
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # --- Plugin Metadata ---
 PLUGIN_NAME = "OPSIN Name to Structure"
-PLUGIN_VERSION = "2.0.0"
+PLUGIN_VERSION = "2.0.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Convert systematic IUPAC names into structures offline with OPSIN "
@@ -33,7 +33,7 @@ PLUGIN_CATEGORY = "Import"
 PLUGIN_TAGS = ["Utility"]
 PLUGIN_DEPENDENCIES = ["py2opsin"]
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=5.0.0, <6.0.0"
-PLUGIN_SUPPORTED_PYTHON_VERSION = ">=3.10, <3.15"
+PLUGIN_SUPPORTED_PYTHON_VERSION = ">=3.9, <3.15"
 PLUGIN_SUPPORTED_OS = ["Windows", "macOS", "Linux", "WSL"]
 
 PLUGIN_CONTEXT = None
