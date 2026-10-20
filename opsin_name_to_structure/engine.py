@@ -12,6 +12,7 @@ did not parse, so a whole batch goes through a single JVM start.
 """
 
 import functools
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -95,11 +96,10 @@ def jar_path() -> Optional[str]:
     Cached: this walks a whole site-packages subtree, and the jar does not
     move while the editor is running.
     """
-    try:
-        import py2opsin
-    except ImportError:
+    spec = importlib.util.find_spec("py2opsin")
+    if spec is None or spec.origin is None:
         return None
-    package_dir = os.path.dirname(os.path.abspath(py2opsin.__file__))
+    package_dir = os.path.dirname(os.path.abspath(spec.origin))
     for root, _dirs, files in os.walk(package_dir):
         for name in sorted(files):
             if name.lower().endswith(".jar"):
@@ -109,9 +109,8 @@ def jar_path() -> Optional[str]:
 
 def availability() -> Tuple[bool, str]:
     """(usable, message). The message is empty when everything is present."""
-    try:
-        import py2opsin  # noqa: F401
-    except ImportError:
+    # Importing py2opsin itself starts `java -version` without a timeout.
+    if importlib.util.find_spec("py2opsin") is None:
         return False, PY2OPSIN_MISSING
     if java_path() is None:
         return False, JAVA_MISSING

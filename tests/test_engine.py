@@ -40,6 +40,7 @@ def test_each_option_maps_to_its_opsin_flag():
 
 
 def test_availability_reports_missing_java(monkeypatch):
+    monkeypatch.setattr(engine.importlib.util, "find_spec", lambda _: object())
     monkeypatch.setattr(engine, "java_path", lambda: None)
     usable, message = engine.availability()
     assert usable is False
@@ -47,17 +48,20 @@ def test_availability_reports_missing_java(monkeypatch):
 
 
 def test_availability_reports_missing_py2opsin(monkeypatch):
-    real_import = __import__
-
-    def blocked(name, *args, **kwargs):
-        if name == "py2opsin":
-            raise ImportError("no py2opsin")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr("builtins.__import__", blocked)
+    monkeypatch.setattr(engine.importlib.util, "find_spec", lambda _: None)
     usable, message = engine.availability()
     assert usable is False
     assert "py2opsin" in message
+
+
+def test_availability_and_jar_lookup_do_not_start_java(monkeypatch):
+    def unexpected_process(*args, **kwargs):
+        raise AssertionError("Dependency detection must not start a JVM")
+
+    monkeypatch.setattr(subprocess, "run", unexpected_process)
+    engine.jar_path.cache_clear()
+    engine.availability()
+    engine.jar_path()
 
 
 def test_convert_refuses_to_run_when_unavailable(monkeypatch):
