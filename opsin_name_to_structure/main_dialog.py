@@ -1,5 +1,7 @@
 """The OPSIN window: names in, structures out, into the 2D editor."""
 
+from ._qt_callbacks import connect_queued
+
 import csv
 import logging
 from typing import Any, List, Optional
@@ -232,8 +234,8 @@ class OpsinDialog(QDialog):
         self._set_busy(True)
         self.status.setText(f"Converting {len(names)} name(s)...")
         self.worker = ConvertWorker(names, self.options())
-        self.worker.done.connect(self._conversion_done)
-        self.worker.failed.connect(self._conversion_failed)
+        connect_queued(self.worker.done, self._conversion_done, self, (list,), cleanup=(self.worker.finished,))
+        connect_queued(self.worker.failed, self._conversion_failed, self, (str,), cleanup=(self.worker.finished,))
         self.worker.start()
 
     def _set_busy(self, busy: bool) -> None:
@@ -423,7 +425,7 @@ class OpsinDialog(QDialog):
                 # finish on its own with a reference held so Qt keeps it alive.
                 if not worker.wait(_CLOSE_GRACE_MS):
                     _ORPHANED.append(worker)
-                    worker.finished.connect(lambda w=worker: _forget(w))
+                    connect_queued(worker.finished, lambda w=worker: _forget(w), cleanup=(worker.finished,))
         # Without this the next open reuses a dead window.
         self.context.register_window(WINDOW_ID, None)
 
