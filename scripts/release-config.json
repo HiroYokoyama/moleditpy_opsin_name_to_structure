@@ -1,0 +1,19 @@
+{
+  "source": "opsin_name_to_structure/__init__.py",
+  "title": "OPSIN Name to Structure",
+  "package": "opsin_name_to_structure",
+  "archive": "opsin_name_to_structure_{version}.zip",
+  "assets": [
+    "opsin_name_to_structure_{version}.zip"
+  ],
+  "include": [
+    "README.md",
+    "LICENSE",
+    "COPYING",
+    "LICENSING.md"
+  ],
+  "exclude": [
+    "*/__pycache__/*",
+    "*/.git/*"
+  ]
+}
